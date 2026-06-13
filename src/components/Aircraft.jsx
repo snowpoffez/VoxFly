@@ -1,70 +1,31 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import AnimatedAircraftMarker from './AnimatedAircraftMarker.jsx'
 
-const POLL_INTERVAL_MS = 10000
+const POLL_INTERVAL_MS = 15000
+const CENTER_LAT = 43.6759
+const CENTER_LON = -79.6294
+const RADIUS_NM  = 250   // nautical miles
 
-const YYZ_COORDS = { lat: 43.6759, lon: -79.6294 }
+// ADSB.lol free API — no auth, no hard rate limit
+const buildUrl = () =>
+  `/api/adsb/v2/lat/${CENTER_LAT}/lon/${CENTER_LON}/dist/${RADIUS_NM}`
 
-const getBoundingBox = (centerLat, centerLon, radiusKm) => {
-  const kmPerDegreeLat = 111.32
-  const kmPerDegreeLon = 40075 * Math.cos(centerLat * Math.PI / 180) / 360
+// ft/min → m/s
+const ftMinToMs = (v) => (v == null ? null : v * 0.00508)
+// feet → metres
+const ftToM = (ft) => (ft == null ? null : ft * 0.3048)
+// knots → m/s
+const ktsToMs = (kts) => (kts == null ? null : kts * 0.51444)
 
-  const deltaLat = radiusKm / kmPerDegreeLat
-  const deltaLon = radiusKm / Math.abs(kmPerDegreeLon)
-
-  return {
-    minLat: centerLat - deltaLat,
-    maxLat: centerLat + deltaLat,
-    minLon: centerLon - deltaLon,
-    maxLon: centerLon + deltaLon
-  }
-}
-
-const BBOX = getBoundingBox(YYZ_COORDS.lat, YYZ_COORDS.lon, 500)
-
-const buildUrl = () => {
-  const { minLat, maxLat, minLon, maxLon } = BBOX
-  return `/api/opensky/states/all?lamin=${minLat}&lamax=${maxLat}&lomin=${minLon}&lomax=${maxLon}`
-}
-
-const calculateDistance = (lat1, lon1, lat2, lon2) => {
-  const R = 6371
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLon = (lon2 - lon1) * Math.PI / 180
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2)
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-  return R * c
-}
-
-const isLargeAircraft = (s) => {
-  const icao24   = (s[0] ?? '').toLowerCase()
-  const lon      = s[5]
-  const lat      = s[6]
-  const velocity = s[9]
-  const geoAlt   = s[13]
-
-  if (lat == null || lon == null) return false
-
-  const distanceFromYYZ = calculateDistance(YYZ_COORDS.lat, YYZ_COORDS.lon, lat, lon)
-  if (distanceFromYYZ > 1000) return false
-
-  if (icao24.startsWith('a') && icao24 >= 'a70000') {
-    const isFast = velocity != null && velocity > 130
-    const isHigh = geoAlt != null && geoAlt > 4500
-    if (!isFast && !isHigh) return false
-  }
-
-  if (icao24 >= 'c4b000' && icao24 <= 'c4b3ff') {
-    if (geoAlt != null && geoAlt < 3500) return false
-  }
-
-  if (velocity != null && velocity < 60 && geoAlt != null && geoAlt < 1500) {
-    return false
-  }
-
+// Keep only plausible airliners / large aircraft
+const isLargeAircraft = (ac) => {
+  const gs  = ac.gs  ?? 0
+  const alt = ac.alt_baro ?? 0
+  // category A3-A5 = large/heavy/high-performance; allow A0 (unknown) too
+  const cat = ac.category ?? ''
+  if (cat && !['', 'A0', 'A3', 'A4', 'A5'].includes(cat)) return false
+  // Must be moving and not on the ground
+  if (gs < 80 && alt < 1000) return false
   return true
 }
 
@@ -86,6 +47,7 @@ export default function Aircraft({ selectedCallsign, onSelectAircraft }) {
   const [aircraft, setAircraft] = useState([])
   const [status, setStatus]     = useState('loading')
   const [errorMsg, setErrorMsg] = useState('')
+  const timerRef = useRef(null)
 
   useEffect(() => {
     let cancelled = false
@@ -97,7 +59,8 @@ export default function Aircraft({ selectedCallsign, onSelectAircraft }) {
         const data = await res.json()
         if (cancelled) return
 
-        setAircraft((data.states ?? []).filter(isLargeAircraft))
+        const planes = (data.ac ?? []).filter(isLargeAircraft)
+        setAircraft(planes)
         setStatus('ok')
       } catch (err) {
         if (cancelled) return
@@ -105,13 +68,16 @@ export default function Aircraft({ selectedCallsign, onSelectAircraft }) {
         setErrorMsg(err.message)
         setStatus('error')
       }
+
+      if (!cancelled) {
+        timerRef.current = setTimeout(fetchAircraft, POLL_INTERVAL_MS)
+      }
     }
 
     fetchAircraft()
-    const intervalId = setInterval(fetchAircraft, POLL_INTERVAL_MS)
     return () => {
       cancelled = true
-      clearInterval(intervalId)
+      clearTimeout(timerRef.current)
     }
   }, [])
 
@@ -124,21 +90,15 @@ export default function Aircraft({ selectedCallsign, onSelectAircraft }) {
         <div style={overlayStyle('#2a1010', '#f77e7e')}>✈ Aircraft unavailable — {errorMsg}</div>
       )}
       {status === 'ok' && aircraft.length === 0 && (
-        <div style={overlayStyle('#1a1a2e', '#7eb8f7')}>✈ No large aircraft in range</div>
+        <div style={overlayStyle('#1a1a2e', '#7eb8f7')}>✈ No aircraft in range</div>
       )}
 
-      {aircraft.map((s) => {
-        const icao24 = s[0]
-        const callsign = (s[1] ?? '').trim() || icao24
-        const country = s[2] ?? '—'
-        const lon = s[5]
-        const lat = s[6]
-        const baroAlt = s[7]
-        const velocity = s[9]
-        const heading = s[10]
-        const vertRate = s[11]
-        const geoAlt = s[13]
-        const squawk = s[14] ?? '—'
+      {aircraft.map((ac) => {
+        const icao24   = ac.hex ?? ''
+        const callsign = (ac.flight ?? '').trim() || icao24
+        const lat      = ac.lat
+        const lon      = ac.lon
+        if (lat == null || lon == null) return null
 
         return (
           <AnimatedAircraftMarker
@@ -146,15 +106,15 @@ export default function Aircraft({ selectedCallsign, onSelectAircraft }) {
             craft={{
               icao24,
               callsign,
-              country,
+              country:  ac.r ?? '—',   // registration as country proxy
               lat,
               lon,
-              baroAlt,
-              geoAlt,
-              velocity,
-              heading,
-              vertRate,
-              squawk,
+              baroAlt:  ftToM(ac.alt_baro),
+              geoAlt:   ftToM(ac.alt_geom),
+              velocity: ktsToMs(ac.gs),
+              heading:  ac.track,
+              vertRate: ftMinToMs(ac.baro_rate),
+              squawk:   ac.squawk ?? '—',
             }}
             isSelected={selectedCallsign === callsign}
             onSelect={onSelectAircraft}

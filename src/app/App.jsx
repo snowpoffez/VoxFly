@@ -3,6 +3,7 @@ import { MapContainer, TileLayer } from 'react-leaflet'
 import L from 'leaflet'
 import Airports from '../components/Airports.jsx'
 import Aircraft from '../components/Aircraft.jsx'
+import AircraftInfoCard from '../components/AircraftInfoCard.jsx'
 
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -81,6 +82,11 @@ export default function App() {
           }}
         />
       </MapContainer>
+
+      <AircraftInfoCard
+        craft={selectedAircraft}
+        onClose={() => setSelectedAircraft(null)}
+      />
     </div>
   )
 }

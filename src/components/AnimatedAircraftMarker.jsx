@@ -1,16 +1,9 @@
 import React, { useEffect, useRef } from 'react'
-import { Marker, Popup } from 'react-leaflet'
+import { Marker } from 'react-leaflet'
 import L from 'leaflet'
 
 const EARTH_RADIUS_M = 6371000
 const CORRECTION_MS = 1500
-
-const labelStyle = { color: '#888', marginRight: 4 }
-
-const formatAlt = (m) =>
-  m == null ? '—' : `${Math.round(m).toLocaleString()} m (${Math.round(m * 3.28084).toLocaleString()} ft)`
-const formatSpeed = (ms) => (ms == null ? '—' : `${Math.round(ms * 3.6)} km/h`)
-const formatHeading = (deg) => (deg == null ? '—' : `${Math.round(deg)}°`)
 
 const planeIcon = (heading, isSelected) => {
   const deg = heading ?? 0
@@ -101,7 +94,17 @@ const getDisplayPosition = (state, now) => {
 }
 
 export default function AnimatedAircraftMarker({ craft, isSelected, onSelect }) {
-  const markerRef = useRef(null)
+  const markerRef  = useRef(null)
+  const onSelectRef = useRef(onSelect)
+  const craftRef    = useRef(craft)
+
+  // Keep refs current so the stable click handler always fires with latest values
+  useEffect(() => { onSelectRef.current = onSelect }, [onSelect])
+  useEffect(() => { craftRef.current = craft }, [craft])
+
+  // Stable handler — bound once, never replaced
+  const handleClick = useRef(() => onSelectRef.current?.(craftRef.current)).current
+
   const stateRef = useRef({
     lat: craft.lat,
     lon: craft.lon,
@@ -159,77 +162,13 @@ export default function AnimatedAircraftMarker({ craft, isSelected, onSelect }) 
     return () => cancelAnimationFrame(frameId)
   }, [isSelected])
 
-  const {
-    icao24,
-    callsign,
-    country,
-    lat,
-    lon,
-    baroAlt,
-    geoAlt,
-    velocity,
-    heading,
-    vertRate,
-    squawk,
-  } = craft
-
   return (
     <Marker
       ref={markerRef}
-      position={[lat, lon]}
-      icon={planeIcon(heading, isSelected)}
+      position={[craft.lat, craft.lon]}
+      icon={planeIcon(craft.heading, isSelected)}
       zIndexOffset={isSelected ? 1000 : 0}
-      eventHandlers={{
-        click: () =>
-          onSelect?.({
-            icao24,
-            callsign,
-            country,
-            lat,
-            lon,
-            baroAlt,
-            geoAlt,
-            velocity,
-            heading,
-            vertRate,
-            squawk,
-          }),
-      }}
-    >
-      <Popup>
-        <div style={{ fontSize: '12px', lineHeight: '1.7', minWidth: 160 }}>
-          <div style={{ fontWeight: 700, fontSize: '13px', marginBottom: 4 }}>✈ {callsign}</div>
-          <div>
-            <span style={labelStyle}>ICAO24</span> {icao24.toUpperCase()}
-          </div>
-          <div>
-            <span style={labelStyle}>Origin</span> {country}
-          </div>
-          <div>
-            <span style={labelStyle}>Squawk</span> {squawk}
-          </div>
-          <div style={{ marginTop: 6, borderTop: '1px solid #ddd', paddingTop: 6 }}>
-            <div>
-              <span style={labelStyle}>Alt (baro)</span> {formatAlt(baroAlt)}
-            </div>
-            <div>
-              <span style={labelStyle}>Alt (geo)</span> {formatAlt(geoAlt)}
-            </div>
-            <div>
-              <span style={labelStyle}>Speed</span> {formatSpeed(velocity)}
-            </div>
-            <div>
-              <span style={labelStyle}>Heading</span> {formatHeading(heading)}
-            </div>
-            <div>
-              <span style={labelStyle}>Vert. rate</span>{' '}
-              {vertRate != null
-                ? `${vertRate > 0 ? '↑' : '↓'} ${Math.abs(Math.round(vertRate))} m/s`
-                : '—'}
-            </div>
-          </div>
-        </div>
-      </Popup>
-    </Marker>
+      eventHandlers={{ click: handleClick }}
+    />
   )
 }

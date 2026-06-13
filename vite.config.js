@@ -7,10 +7,10 @@ export default defineConfig({
     port: 3000,
     open: true,
     proxy: {
-      '/api/opensky': {
-        target: 'https://opensky-network.org',
+      '/api/adsb': {
+        target: 'https://api.adsb.lol',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/opensky/, '/api'),
+        rewrite: (path) => path.replace(/^\/api\/adsb/, ''),
         secure: true,
       },
     },

@@ -179,6 +179,108 @@ body {
   background-color: #2a2a2a;
 }
 
+.aircraft-card {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 9999;
+  width: 280px;
+  padding: 1rem 1.1rem 1.1rem;
+  background: rgba(8, 12, 18, 0.92);
+  color: #e8edf2;
+  border: 1px solid rgba(255, 122, 24, 0.4);
+  border-radius: 16px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  animation: aircraft-card-in 160ms ease;
+}
+
+@keyframes aircraft-card-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.aircraft-card__close {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.6rem;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #adbac7;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.aircraft-card__close:hover {
+  background: rgba(255, 122, 24, 0.18);
+  color: #fff;
+}
+
+.aircraft-card__header {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-bottom: 0.85rem;
+  padding-right: 1.5rem;
+}
+
+.aircraft-card__plane {
+  display: inline-block;
+  font-size: 1.6rem;
+  color: #ff7a18;
+  filter: drop-shadow(0 0 6px rgba(255, 122, 24, 0.6));
+}
+
+.aircraft-card__title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.aircraft-card__subtitle {
+  color: #7ea2c8;
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+}
+
+.aircraft-card__section {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.65rem 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.aircraft-card__section:last-child {
+  padding-bottom: 0;
+}
+
+.aircraft-card__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.aircraft-card__label {
+  color: #8895a4;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.aircraft-card__value {
+  color: #f4f7fa;
+  font-weight: 600;
+  text-align: right;
+}
+
 @media (max-width: 900px) {
   .app-shell {
     grid-template-columns: 1fr;
