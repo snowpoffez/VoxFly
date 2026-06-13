@@ -1,0 +1,46 @@
+{
+  "configurations": [
+    {
+      "name": "Win32",
+      "includePath": [
+        "${workspaceFolder}/arduino",
+        "${workspaceFolder}/arduino/libraries",
+        "${workspaceFolder}/arduino/libraries/Servo/src",
+        "${workspaceFolder}/**",
+        "C:/Users/yth17/AppData/Local/Arduino15/packages/arduino/hardware/avr/1.8.8/cores/arduino",
+        "C:/Users/yth17/AppData/Local/Arduino15/packages/arduino/hardware/avr/1.8.8/variants/standard"
+        ,"C:/Users/yth17/Documents/Arduino/libraries"
+        ,"C:/Program Files (x86)/Arduino/libraries"
+        ,"C:/Program Files/Arduino/libraries"
+        ,"C:/Users/yth17/AppData/Local/Arduino15/packages/arduino/hardware/avr/1.8.8/libraries"
+      ],
+      "forcedInclude": [
+        "C:/Users/yth17/AppData/Local/Arduino15/packages/arduino/hardware/avr/1.8.8/cores/arduino/Arduino.h"
+      ],
+      "browse": {
+        "path": [
+          "${workspaceFolder}",
+          "C:/Users/yth17/AppData/Local/Arduino15/packages/arduino/hardware/avr/1.8.8/cores/arduino",
+          "C:/Users/yth17/AppData/Local/Arduino15/packages/arduino/hardware/avr/1.8.8/variants/standard",
+          "C:/Users/yth17/Documents/Arduino/libraries",
+          "C:/Program Files (x86)/Arduino/libraries",
+          "C:/Program Files/Arduino/libraries"
+        ],
+        "limitSymbolsToIncludedHeaders": false,
+        "databaseFilename": "${workspaceFolder}/.vscode/arduino-browse.vc.db"
+      },
+      "defines": [
+        "ARDUINO=10808",
+        "ARDUINO_AVR_UNO",
+        "ARDUINO_ARCH_AVR",
+        "__AVR_ATmega328P__",
+        "F_CPU=16000000L"
+      ],
+      "compilerPath": "C:/Users/yth17/AppData/Local/Arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/bin/avr-g++.exe",
+      "cStandard": "c11",
+      "cppStandard": "c++17",
+      "intelliSenseMode": "windows-gcc-x64"
+    }
+  ],
+  "version": 4
+}
