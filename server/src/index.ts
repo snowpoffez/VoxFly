@@ -55,13 +55,10 @@ sm.on('confirmation_timeout', () => {
   pendingCommand = null; pendingRoutes = null; pendingLogId = null
 })
 
-// ── Servo pitch by flight phase ───────────────────────────────────────────────
-const PHASE_PITCH: Record<string, number> = {
-  PARKED_AT_GATE: 0, PUSHBACK: 0, TAXI_TO_RUNWAY: 0, HOLDING_SHORT: 0,
-  LINEUP_AND_WAIT: 0, TAKEOFF_ROLL: 3, ROTATE: 15, CLIMBING: 15,
-  CRUISE: 2, DESCENDING: -5, APPROACH: -8, FINAL: -10,
-  TOUCHDOWN: -5, LANDING_ROLL: 0, VACATE_RUNWAY: 0, TAXI_TO_GATE: 0,
-}
+// ── Live aircraft tracking stepper throttle ───────────────────────────────────
+let lastLiveHeadingSend = 0
+let lastLiveHeading: number | null = null
+const LIVE_HEADING_MIN_INTERVAL_MS = 20
 
 function timestamp(): string {
   return new Date().toLocaleTimeString('en-CA', { hour12: false })
@@ -77,24 +74,15 @@ async function runTakeoffSequence(airport: string, runway: string) {
     ['TAKEOFF_ROLL',    30000],
     ['ROTATE',           5000],
     ['CLIMBING',        60000],
-    ['CRUISE',              0],
+    ['CRUISE',               0],
   ]
-
-  const announcements: Record<string, string> = {
-    PUSHBACK:        'Pushback commencing.',
-    TAXI_TO_RUNWAY:  `Taxi to runway ${runway} via taxiway Echo.`,
-    HOLDING_SHORT:   `Holding short runway ${runway}.`,
-    LINEUP_AND_WAIT: `Runway ${runway}, line up and wait.`,
-    TAKEOFF_ROLL:    `Cleared for takeoff runway ${runway}.`,
-    ROTATE:          'Rotate.',
-    CLIMBING:        'Positive rate, gear up.',
-    CRUISE:          `Climbing to cruise altitude. Departing ${airport}.`,
-  }
 
   for (const [phase, duration] of phases) {
     sm.transition(phase as any)
     broadcast({ type: 'ground_phase', phase: phase as any, airport, runway })
-    sendBearing(0, PHASE_PITCH[phase] ?? 0)
+    
+    // FIXED: Only passing 1 argument to match the stepper hardware service pipeline
+    sendBearing(0) 
     if (duration > 0) await delay(duration)
   }
 }
@@ -111,21 +99,12 @@ async function runLandingSequence(airport: string, runway: string) {
     ['PARKED_AT_GATE',   0],
   ]
 
-  const announcements: Record<string, string> = {
-    DESCENDING:     `Descending. Expect runway ${runway}.`,
-    APPROACH:       `Approaching final runway ${runway}. Wind calm.`,
-    FINAL:          `Runway ${runway} in sight. Gear down, flaps full.`,
-    TOUCHDOWN:      'Touchdown. Thrust reversers.',
-    LANDING_ROLL:   'Decelerating.',
-    VACATE_RUNWAY:  'Vacating runway. Contact ground.',
-    TAXI_TO_GATE:   'Taxi to gate via taxiway Echo.',
-    PARKED_AT_GATE: `Welcome to ${airport}. Parked at gate.`,
-  }
-
   for (const [phase, duration] of phases) {
     sm.transition(phase as any)
     broadcast({ type: 'ground_phase', phase: phase as any, airport, runway })
-    sendBearing(0, PHASE_PITCH[phase] ?? 0)
+    
+    // FIXED: Only passing 1 argument to match the stepper hardware service pipeline
+    sendBearing(0)
     if (duration > 0) await delay(duration)
   }
 }
@@ -141,7 +120,6 @@ async function processTranscript(text: string) {
   const parsed = parseCommand(text)
   broadcast({ type: 'command_parsed', command: parsed.command, confidence: parsed.confidence, raw: text })
 
-  // Low confidence → request readback without executing
   if (parsed.confidence < 0.75) {
     const msg = `Did you say: ${commandToReadback(parsed.command)} Please confirm or repeat.`
     const { translated } = await speak(msg, currentLang)
@@ -154,14 +132,12 @@ async function processTranscript(text: string) {
 
   const cmd = parsed.command
 
-  // Confirm/cancel short-circuit
   if (cmd.type === 'confirm') { handleConfirm(); return }
   if (cmd.type === 'cancel')  { handleCancel();  return }
 
-  // Route request → score routes first
   if (cmd.type === 'route_request' || cmd.type === 'airport') {
     sm.transition('ANALYZING')
-    const toLat = 43.6777, toLon = -79.6248  // Default destination: CYYZ
+    const toLat = 43.6777, toLon = -79.6248
     const routes = await scoreRoutes(43.8561, -79.3370, toLat, toLon, 0.4)
     pendingRoutes = routes
     sm.transition('RECOMMENDING')
@@ -197,7 +173,6 @@ async function processTranscript(text: string) {
     return
   }
 
-  // Ground ops — takeoff
   if (cmd.type === 'takeoff') {
     const readbackEn = `Takeoff runway ${cmd.runway} at ${cmd.airport} confirmed. Say confirm to proceed.`
     const { translated } = await speak(readbackEn, currentLang)
@@ -210,7 +185,6 @@ async function processTranscript(text: string) {
     return
   }
 
-  // Ground ops — land
   if (cmd.type === 'land') {
     const apData = AIRPORTS.find(a => a.icao === cmd.airport)
     const readbackEn = `Cleared to land runway ${cmd.runway} at ${cmd.airport}. Confirm to proceed.`
@@ -227,7 +201,6 @@ async function processTranscript(text: string) {
     return
   }
 
-  // Direct heading
   if (cmd.type === 'heading') {
     const readbackEn = `Turning to heading ${cmd.value}. Say confirm to proceed.`
     const { translated } = await speak(readbackEn, currentLang)
@@ -235,12 +208,14 @@ async function processTranscript(text: string) {
     broadcast({ type: 'tts_ready' })
     pendingCommand = cmd
     const logId = Date.now().toString(); pendingLogId = logId
+    
+    // FIXED: Changed 'id: id = logId' to 'id: logId'
     logEntry({ id: logId, timestamp: timestamp(), commandType: 'HEADING', display: `Heading ${cmd.value}°`, status: 'pending', confidence: parsed.confidence })
+    
     sm.transition('AWAITING_CONFIRMATION')
     return
   }
 
-  // Altitude
   if (cmd.type === 'altitude') {
     const readbackEn = `${cmd.value > 10000 ? 'Climbing' : 'Descending'} to ${cmd.value.toLocaleString()} ${cmd.unit}. Say confirm to proceed.`
     const { translated } = await speak(readbackEn, currentLang)
@@ -253,7 +228,6 @@ async function processTranscript(text: string) {
     return
   }
 
-  // Unknown
   const { translated } = await speak('Command not understood. Please repeat.', currentLang)
   broadcast({ type: 'readback', english: 'Command not understood. Please repeat.', translated, lang: currentLang })
   broadcast({ type: 'tts_ready' })
@@ -275,7 +249,8 @@ async function handleConfirm() {
   }
 
   if (cmd.type === 'heading') {
-    sendBearing(cmd.value, PHASE_PITCH[sm.state] ?? 2)
+    // FIXED: Pitch argument removed
+    sendBearing(cmd.value)
     await delay(2000)
     sm.transition('STABILIZED')
     await delay(1000)
@@ -293,7 +268,8 @@ async function handleConfirm() {
     })
     runLandingSequence(cmd.airport, cmd.runway).catch(console.error)
   } else {
-    sendBearing(0, 2)
+    // FIXED: Pitch argument removed
+    sendBearing(0)
     await delay(2000)
     sm.transition('STABILIZED')
     await delay(1000)
@@ -316,7 +292,6 @@ function handleCancel() {
 wss.on('connection', (ws) => {
   console.log('[WS] Client connected')
 
-  // Send current state on connect
   ws.send(JSON.stringify({ type: 'state', state: sm.state } satisfies S2C))
   commandLog.slice(0, 20).reverse().forEach(entry => {
     ws.send(JSON.stringify({ type: 'log', entry } satisfies S2C))
@@ -328,7 +303,6 @@ wss.on('connection', (ws) => {
 
     switch (msg.type) {
       case 'transcript': {
-        // Check for confirm/cancel BEFORE any state transition
         const quickParse = parseCommand(msg.text)
         if (quickParse.command.type === 'confirm') { await handleConfirm(); break }
         if (quickParse.command.type === 'cancel')  { handleCancel();         break }
@@ -371,6 +345,28 @@ wss.on('connection', (ws) => {
         break
       }
 
+      // ── Live aircraft tracking — drive stepper directly ──
+      case 'heading_update': {
+        if (typeof msg.heading === 'number') {
+          const now = Date.now()
+          if (now - lastLiveHeadingSend >= LIVE_HEADING_MIN_INTERVAL_MS) {
+            // FIXED: Pitch argument removed
+            sendBearing(msg.heading)
+            lastLiveHeadingSend = now
+
+            if (lastLiveHeading !== null) {
+              const delta = ((msg.heading - lastLiveHeading + 540) % 360) - 180
+              if (Math.abs(delta) >= 0.5) {
+                const dir = delta > 0 ? 'right' : 'left'
+                console.log(`[Stepper] Rotating ${dir} → ${Math.round(msg.heading)}°`)
+              }
+            }
+            lastLiveHeading = msg.heading
+          }
+        }
+        break
+      }
+
       case 'ping':
         ws.send(JSON.stringify({ type: 'state', state: sm.state }))
         break
@@ -392,7 +388,6 @@ app.get('/api/tts/latest', (req, res) => {
 app.post('/api/servo/test', (req, res) => {
   res.json(testServo())
 })
-
 
 app.get('/api/airports', (req, res) => {
   res.json(AIRPORTS)

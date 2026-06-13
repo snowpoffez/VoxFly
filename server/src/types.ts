@@ -90,3 +90,4 @@ export type C2S =
   | { type: 'language'; lang: string }
   | { type: 'ground_command'; cmd: { type: string; runway?: string; airport?: string; gate?: string } }
   | { type: 'ping' }
+  | { type: 'heading_update'; heading: number }

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Marker, Polyline } from 'react-leaflet'
 import L from 'leaflet'
+import { send } from '../services/wsClient.js'
 
 const EARTH_RADIUS_M  = 6371000
 const CORRECTION_MS   = 1500
@@ -107,7 +108,6 @@ function buildApproachWaypoints(planeLat, planeLon, planeHdg, runway) {
   const hdgToFAFMisalignment = Math.abs(((planeHdg - brgToFAF + 540) % 360) - 180)
   const entryAngleMisalignment = Math.abs(((runway.hdg - planeHdg + 540) % 360) - 180)
 
-  // --- SHORT-CIRCUIT PROFILE: DIRECT STREAM INJECTION ---
   if (hdgToFAFMisalignment < 40 && entryAngleMisalignment < 70) {
     const directTrack = []
     let fLat = planeLat
@@ -140,20 +140,14 @@ function buildApproachWaypoints(planeLat, planeLon, planeHdg, runway) {
     return { allWPs: [...directTrack, ...clLinePts], curveLine: directTrack.map(p => [p.lat, p.lon]), centerlineLine }
   }
 
-  // --- OPTIMIZED SINGLE-BUBBLE GEOMETRIC VECTOR SOLVER ---
-  // We evaluate turns in both directions (Right/Left) to pick the one that creates a single clean bubble loop
   const centerlineAngleDiff = ((runway.hdg - brgToFAF + 540) % 360) - 180
-  
-  // Decide the side choice that prevents nested double figure-eights
   const optimalSideTurnDir = centerlineAngleDiff >= 0 ? 1 : -1
 
-  // Trace the backward approach template path from the FAF joint outward
   const backwardPts = [{ lat: faf.lat, lon: faf.lon, hdg: runway.hdg }]
   let bLat = faf.lat
   let bLon = faf.lon
   let bHdg = runway.hdg
 
-  // Expand base trajectory layout up to 270 degrees to create one large smooth sweep
   for (let s = 0; s < 270; s++) {
     const hdgChange = SIM_TURN_RATE_DEG_S * SIM_DT * optimalSideTurnDir
     bHdg = (bHdg - hdgChange + 360) % 360
@@ -164,7 +158,6 @@ function buildApproachWaypoints(planeLat, planeLon, planeHdg, runway) {
     backwardPts.push({ lat: bLat, lon: bLon, hdg: bHdg })
   }
 
-  // Track forward from the current position, matching the aircraft's real nose vector
   let fLat = planeLat
   let fLon = planeLon
   let fHdg = planeHdg
@@ -174,19 +167,16 @@ function buildApproachWaypoints(planeLat, planeLon, planeHdg, runway) {
   let bestBackwardIdx = 0
   let interceptFound = false
 
-  // Evaluate which direction the aircraft should roll to seamlessly merge onto the bubble tangent
   const initialSteerDiff = ((calcBearing(planeLat, planeLon, backwardPts[40]?.lat || faf.lat, backwardPts[40]?.lon || faf.lon) - planeHdg + 540) % 360) - 180
   const chosenAircraftTurnDir = initialSteerDiff >= 0 ? 1 : -1
 
   for (let f = 0; f < maxSteps; f++) {
-    // Keep a continuous minimum rolling forward arc for 10 seconds to ensure a curved joint connection
     const isInitialArcForced = (f < 10)
 
     let closestBackIdx = -1
     let minDiff = Infinity
 
     if (!isInitialArcForced) {
-      // Look for a perfect tangential intersection point
       for (let b = 0; b < backwardPts.length; b++) {
         const bPt = backwardPts[b]
         const brgToTarget = calcBearing(fLat, fLon, bPt.lat, bPt.lon)
@@ -209,7 +199,6 @@ function buildApproachWaypoints(planeLat, planeLon, planeHdg, runway) {
       break
     }
 
-    // Apply the standard rate turn physics engine step
     const maxTurn = SIM_TURN_RATE_DEG_S * SIM_DT
     fHdg = (fHdg + (chosenAircraftTurnDir * maxTurn) + 360) % 360
 
@@ -222,12 +211,10 @@ function buildApproachWaypoints(planeLat, planeLon, planeHdg, runway) {
   const dynamicTrack = []
 
   if (interceptFound) {
-    // Extract the forward sweep
     for (let i = 0; i <= bestForwardIdx; i++) {
       dynamicTrack.push({ lat: forwardPts[i].lat, lon: forwardPts[i].lon })
     }
 
-    // Create a perfectly smooth tangent bridging connection line between the two curves
     const interceptStart = forwardPts[bestForwardIdx]
     const interceptEnd = backwardPts[bestBackwardIdx]
     const gapDist = distM(interceptStart.lat, interceptStart.lon, interceptEnd.lat, interceptEnd.lon)
@@ -246,12 +233,10 @@ function buildApproachWaypoints(planeLat, planeLon, planeHdg, runway) {
       }
     }
 
-    // Merge into the base procedural arrival sweep arc straight into the 10NM FAF window
     for (let i = bestBackwardIdx; i >= 0; i--) {
       dynamicTrack.push({ lat: backwardPts[i].lat, lon: backwardPts[i].lon })
     }
   } else {
-    // Clean direct visual fallback path line structure layout line
     dynamicTrack.push({ lat: planeLat, lon: planeLon })
     dynamicTrack.push({ lat: faf.lat, lon: faf.lon })
   }
@@ -314,6 +299,9 @@ export default function AnimatedAircraftMarker({
   const runwaysRef       = useRef(runwaysMap)
   const livePosRefRef    = useRef(livePosRef)
   const onLandingRef     = useRef(onLandingComplete)
+  const isSelectedRef    = useRef(isSelected)
+  const lastStepperHdg   = useRef(-999)   
+  const lastStepperTime  = useRef(0)      
 
   useEffect(() => { onSelectRef.current   = onSelect         }, [onSelect])
   useEffect(() => { craftRef.current      = craft            }, [craft])
@@ -321,6 +309,7 @@ export default function AnimatedAircraftMarker({
   useEffect(() => { runwaysRef.current    = runwaysMap       }, [runwaysMap])
   useEffect(() => { livePosRefRef.current = livePosRef       }, [livePosRef])
   useEffect(() => { onLandingRef.current  = onLandingComplete }, [onLandingComplete])
+  useEffect(() => { isSelectedRef.current = isSelected       }, [isSelected])
 
   const handleClick = useRef(() => onSelectRef.current?.(craftRef.current)).current
 
@@ -373,11 +362,9 @@ export default function AnimatedAircraftMarker({
 
     const now = Date.now()
     const cur = getDisplayPos(state, now)
-
     const runway = pickRunway(runwaysMap, landingTarget.airport, cur.lat, cur.lon)
     if (!runway) return
 
-    // Pass the real-time display heading directly to avoid layout jumps
     const { allWPs, curveLine, centerlineLine } = buildApproachWaypoints(cur.lat, cur.lon, state.displayHeading, runway)
 
     state.landing          = true
@@ -475,6 +462,19 @@ export default function AnimatedAircraftMarker({
 
       state.displayHeading = lerpAngle(state.displayHeading, state.commandedHeading, 0.12)
       marker.setLatLng([pos.lat, pos.lon])
+
+      // Stream full 0-360 true heading to the stepper architecture via WebSocket
+      if (isSelectedRef.current) {
+        const hdg = Math.round(state.displayHeading * 10) / 10
+        const elapsed = now - lastStepperTime.current
+        
+        // Check for directional changes
+        if (elapsed >= 30 && Math.abs(hdg - lastStepperHdg.current) >= 0.1) {
+          send({ type: 'heading_update', heading: hdg })
+          lastStepperHdg.current  = hdg
+          lastStepperTime.current = now
+        }
+      }
 
       if (livePosRefRef.current) {
         livePosRefRef.current.current = {
