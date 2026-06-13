@@ -94,8 +94,6 @@ async function runTakeoffSequence(airport: string, runway: string) {
   for (const [phase, duration] of phases) {
     sm.transition(phase as any)
     broadcast({ type: 'ground_phase', phase: phase as any, airport, runway })
-    const { translated } = await speak(announcements[phase] ?? phase, currentLang)
-    broadcast({ type: 'tts_ready' })
     sendBearing(0, PHASE_PITCH[phase] ?? 0)
     if (duration > 0) await delay(duration)
   }
@@ -127,8 +125,6 @@ async function runLandingSequence(airport: string, runway: string) {
   for (const [phase, duration] of phases) {
     sm.transition(phase as any)
     broadcast({ type: 'ground_phase', phase: phase as any, airport, runway })
-    const { translated } = await speak(announcements[phase] ?? phase, currentLang)
-    broadcast({ type: 'tts_ready' })
     sendBearing(0, PHASE_PITCH[phase] ?? 0)
     if (duration > 0) await delay(duration)
   }
@@ -216,9 +212,13 @@ async function processTranscript(text: string) {
 
   // Ground ops — land
   if (cmd.type === 'land') {
-    const readbackEn = `Cleared to land runway ${cmd.runway} at ${cmd.airport}. Say confirm to proceed.`
+    const apData = AIRPORTS.find(a => a.icao === cmd.airport)
+    const readbackEn = `Cleared to land runway ${cmd.runway} at ${cmd.airport}. Confirm to proceed.`
     const { translated } = await speak(readbackEn, currentLang)
-    broadcast({ type: 'readback', english: readbackEn, translated, lang: currentLang })
+    broadcast({
+      type: 'readback', english: readbackEn, translated, lang: currentLang,
+      meta: { command: 'land', airport: cmd.airport, runway: cmd.runway, lat: apData?.lat ?? 43.6777, lon: apData?.lon ?? -79.6248 },
+    })
     broadcast({ type: 'tts_ready' })
     pendingCommand = cmd
     const logId = Date.now().toString(); pendingLogId = logId
@@ -261,7 +261,7 @@ async function processTranscript(text: string) {
 }
 
 async function handleConfirm() {
-  if (!pendingCommand || sm.state !== 'AWAITING_CONFIRMATION') {
+  if (!pendingCommand) {
     sm.transition('IDLE'); return
   }
   sm.transition('EXECUTING')
@@ -283,6 +283,14 @@ async function handleConfirm() {
   } else if (cmd.type === 'takeoff') {
     runTakeoffSequence(cmd.airport, cmd.runway).catch(console.error)
   } else if (cmd.type === 'land') {
+    const apData = AIRPORTS.find(a => a.icao === cmd.airport)
+    broadcast({
+      type: 'land_execute',
+      airport: cmd.airport,
+      runway: cmd.runway,
+      lat: apData?.lat ?? 43.6777,
+      lon: apData?.lon ?? -79.6248,
+    })
     runLandingSequence(cmd.airport, cmd.runway).catch(console.error)
   } else {
     sendBearing(0, 2)
@@ -319,11 +327,16 @@ wss.on('connection', (ws) => {
     try { msg = JSON.parse(raw.toString()) } catch { return }
 
     switch (msg.type) {
-      case 'transcript':
+      case 'transcript': {
+        // Check for confirm/cancel BEFORE any state transition
+        const quickParse = parseCommand(msg.text)
+        if (quickParse.command.type === 'confirm') { await handleConfirm(); break }
+        if (quickParse.command.type === 'cancel')  { handleCancel();         break }
         sm.transition('LISTENING')
         await delay(300)
         await processTranscript(msg.text)
         break
+      }
 
       case 'confirm':
         await handleConfirm()

@@ -74,10 +74,11 @@ export interface LogEntry {
 export type S2C =
   | { type: 'state';          state: AppState }
   | { type: 'command_parsed'; command: Command; confidence: number; raw: string }
-  | { type: 'readback';       english: string; translated: string; lang: string }
+  | { type: 'readback';       english: string; translated: string; lang: string; meta?: { command: string; airport?: string; lat?: number; lon?: number; runway?: string } }
   | { type: 'routes';         routes: ScoredRoute[]; pendingCommand: Command }
   | { type: 'log';            entry: LogEntry }
   | { type: 'tts_ready' }
+  | { type: 'land_execute';   airport: string; runway: string; lat: number; lon: number }
   | { type: 'ground_phase';   phase: AppState; airport: string; runway?: string; gate?: string }
   | { type: 'no_fly_alert';   zoneName: string; alternateRoute: ScoredRoute }
   | { type: 'error';          message: string }

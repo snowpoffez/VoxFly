@@ -7,8 +7,7 @@ import AirportInfoCard from '../components/AirportInfoCard.jsx'
 import WindLayer, { WIND_LEVELS } from '../components/WindLayer.jsx'
 import CommandLog      from '../components/CommandLog.jsx'
 import RoutePreview    from '../components/RoutePreview.jsx'
-import GroundOpsPanel  from '../components/GroundOpsPanel.jsx'
-import { on, send }    from '../services/wsClient.js'
+import { on, send, setPTTActive } from '../services/wsClient.js'
 import { startListening, stopListening, isSupported } from '../services/voiceInput.js'
 
 delete L.Icon.Default.prototype._getIconUrl
@@ -19,6 +18,36 @@ L.Icon.Default.mergeOptions({
 })
 
 const DEFAULT_CENTER = [43.677, -79.6305]
+
+const CONFIRM_RE = /\b(confirm|confirmed|yes|yeah|affirm|affirmative|approved|approve|wilco|roger|correct|proceed|go ahead)\b/i
+const CANCEL_RE  = /\b(cancel|negative|no|abort|stop|nope|nah|disregard)\b/i
+const LAND_RE    = /\b(land|approach|cleared to land)\b/i
+
+const AIRPORT_COORDS = {
+  CYYZ: { lat: 43.6777, lon: -79.6248 },
+  KJFK: { lat: 40.6413, lon: -73.7781 },
+  KORD: { lat: 41.9742, lon: -87.9073 },
+  CYUL: { lat: 45.4706, lon: -73.7408 },
+  CYVR: { lat: 49.1967, lon: -123.1815 },
+  CYYC: { lat: 51.1315, lon: -114.0106 },
+  CYEG: { lat: 53.3097, lon: -113.5797 },
+}
+const AIRPORT_ALIASES = {
+  toronto: 'CYYZ', pearson: 'CYYZ', yyz: 'CYYZ',
+  jfk: 'KJFK', 'new york': 'KJFK', kennedy: 'KJFK',
+  chicago: 'KORD', ohare: 'KORD', ord: 'KORD',
+  montreal: 'CYUL', yul: 'CYUL',
+  vancouver: 'CYVR', yvr: 'CYVR',
+  calgary: 'CYYC', yyc: 'CYYC',
+  edmonton: 'CYEG', yeg: 'CYEG',
+}
+function parseLandTarget(text) {
+  const t = text.toLowerCase()
+  for (const [alias, icao] of Object.entries(AIRPORT_ALIASES)) {
+    if (t.includes(alias)) return { airport: icao, runway: '06L', ...AIRPORT_COORDS[icao] }
+  }
+  return null
+}
 
 const LANGUAGES = [
   { code: 'fr', label: 'Français'  },
@@ -44,17 +73,41 @@ export default function App() {
   const [readback,    setReadback]    = useState(null)
   const [routes,      setRoutes]      = useState([])
   const [commandLog,  setCommandLog]  = useState([])
-  const [isListening, setIsListening] = useState(false)
-  const [pttHeld,     setPttHeld]     = useState(false)
+  const [isListening,    setIsListening]    = useState(false)
+  const [pttHeld,        setPttHeld]        = useState(false)
+  const [landingTarget,  setLandingTarget]  = useState(null)
+  const [approved,       setApproved]       = useState(false)
+  const pendingLandMeta = useRef(null)
 
   // ── WebSocket events ──────────────────────────────────────────────────────────
   useEffect(() => {
     const unsubs = [
       on('_connected',    () => setWsConnected(true)),
       on('_disconnected', () => setWsConnected(false)),
-      on('state',   (msg) => setAppState(msg.state)),
-      on('readback', (msg) => setReadback({ english: msg.english, translated: msg.translated })),
+      on('state', (msg) => {
+        setAppState(msg.state)
+        // Voice "confirm" path: server transitions to EXECUTING — apply pending land target
+        if (msg.state === 'EXECUTING' && pendingLandMeta.current) {
+          setLandingTarget(pendingLandMeta.current)
+          pendingLandMeta.current = null
+          setApproved(true)
+          setTimeout(() => setApproved(false), 3000)
+        }
+      }),
+      on('readback', (msg) => {
+        setReadback({ english: msg.english, translated: msg.translated })
+        if (msg.meta?.command === 'land') {
+          pendingLandMeta.current = { lat: msg.meta.lat, lon: msg.meta.lon, airport: msg.meta.airport, runway: msg.meta.runway }
+        } else {
+          pendingLandMeta.current = null
+        }
+      }),
       on('routes',  (msg) => setRoutes(msg.routes ?? [])),
+      on('land_execute', (msg) => {
+        setLandingTarget({ lat: msg.lat, lon: msg.lon, airport: msg.airport, runway: msg.runway })
+        setApproved(true)
+        setTimeout(() => setApproved(false), 3000)
+      }),
       on('log', (msg) => {
         setCommandLog(prev => {
           const idx = prev.findIndex(e => e.id === msg.entry.id)
@@ -81,26 +134,60 @@ export default function App() {
 
   const handlePTTStart = useCallback(() => {
     if (!isSupported()) return
+    setPTTActive(true)
     setIsListening(true)
     setTranscript('')
     startListening({
       onListenStart: () => setIsListening(true),
       onTranscript:  (text) => {
         setTranscript(text)
+        setPTTActive(false)
+
+        if (LAND_RE.test(text)) {
+          // Store land target client-side immediately so confirm doesn't need server
+          const target = parseLandTarget(text)
+          if (target) pendingLandMeta.current = target
+        } else if (CONFIRM_RE.test(text) && pendingLandMeta.current) {
+          // Confirm locally — don't wait for server round-trip
+          setLandingTarget(pendingLandMeta.current)
+          pendingLandMeta.current = null
+          setApproved(true)
+          setTimeout(() => setApproved(false), 3000)
+        } else if (CANCEL_RE.test(text)) {
+          pendingLandMeta.current = null
+          setLandingTarget(null)
+        }
+
         send({ type: 'transcript', text })
         setIsListening(false)
       },
-      onListenEnd: () => setIsListening(false),
+      onListenEnd: () => { setPTTActive(false); setIsListening(false) },
     })
   }, [])
 
   const handlePTTEnd = useCallback(() => {
-    stopListening(); setIsListening(false)
+    stopListening()
+    setPTTActive(false)
+    setIsListening(false)
   }, [])
 
   const handleLangChange = (newLang) => { setLang(newLang); send({ type: 'language', lang: newLang }) }
-  const handleConfirm = () => send({ type: 'confirm' })
-  const handleCancel  = () => send({ type: 'cancel'  })
+
+  const handleConfirm = () => {
+    send({ type: 'confirm' })
+    if (pendingLandMeta.current) {
+      setLandingTarget(pendingLandMeta.current)
+      pendingLandMeta.current = null
+      setApproved(true)
+      setTimeout(() => setApproved(false), 3000)
+    }
+  }
+
+  const handleCancel = () => {
+    send({ type: 'cancel' })
+    pendingLandMeta.current = null
+    setLandingTarget(null)
+  }
 
   return (
     <div className="cockpit">
@@ -124,6 +211,9 @@ export default function App() {
               <span className="topbar__readback-fr">{readback.translated}</span>
             </div>
           )}
+          {approved && (
+            <div className="topbar__approved">✓ APPROVED</div>
+          )}
         </div>
 
         <div className="topbar__right">
@@ -131,11 +221,8 @@ export default function App() {
             {LANGUAGES.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
           </select>
 
-          {appState === 'AWAITING_CONFIRMATION' && (
-            <div className="topbar__confirm-btns">
-              <button className="confirm-btn confirm-btn--yes" onClick={handleConfirm}>✓ Confirm</button>
-              <button className="confirm-btn confirm-btn--no"  onClick={handleCancel}>✗ Cancel</button>
-            </div>
+          {appState === 'AWAITING_CONFIRMATION' && !approved && (
+            <div className="topbar__awaiting">Say "confirm" or "cancel"</div>
           )}
         </div>
       </div>
@@ -165,8 +252,11 @@ export default function App() {
             />
             <Aircraft
               selectedCallsign={selectedAircraft?.callsign}
+              landingTarget={landingTarget}
+              runwaysMap={runwaysMap}
               livePosRef={livePosRef}
               onSelectAircraft={setSelectedAircraft}
+              onLandingComplete={() => setLandingTarget(null)}
             />
             <WindLayer visible={windVisible} />
             <RoutePreview routes={routes} appState={appState} />
@@ -211,7 +301,6 @@ export default function App() {
             livePosRef={livePosRef}
             onCloseAircraft={() => setSelectedAircraft(null)}
           />
-          <GroundOpsPanel appState={appState} />
         </div>
       </div>
 
@@ -226,11 +315,6 @@ export default function App() {
           {isListening ? 'Listening…' : 'Push to Talk'}
           <span className="ptt-btn__hint">[Space]</span>
         </button>
-        {appState === 'AWAITING_CONFIRMATION' && (
-          <div className="bottombar__confirm-hint">
-            Say <strong>"confirm"</strong> to proceed or <strong>"cancel"</strong> to abort
-          </div>
-        )}
       </div>
     </div>
   )

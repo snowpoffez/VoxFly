@@ -82,13 +82,13 @@ export function parseCommand(raw: string): ParsedCommand {
   }
 
   // Landing
-  const landMatch = text.match(/(?:land|approach|cleared to land|cleared for approach).*?(?:runway\s*)?([a-z0-9\s]+(?:left|right|l|r)?)/i)
-  if (landMatch && /land|approach/i.test(text)) {
-    const airportMatch = text.match(/(?:at|cyyz|cyvr|cyul|cyyc|cyeg|toronto|vancouver|montreal|calgary|edmonton)/i)
-    const airportRaw   = airportMatch ? airportMatch[0].replace(/^at\s*/i,'') : 'CYYZ'
+  if (/\b(?:land|approach|cleared to land|cleared for approach)\b/i.test(text)) {
+    const airportMatch = text.match(/\b(cyyz|cyul|cyvr|cyyc|cyeg|kjfk|kord|yyz|yul|yvr|yyc|yeg|toronto|vancouver|montreal|calgary|edmonton|chicago|new york)\b/i)
+    const airportRaw   = airportMatch ? airportMatch[1] : 'CYYZ'
     const airport      = AIRPORT_ALIASES[airportRaw.toLowerCase()] ?? airportRaw.toUpperCase()
-    const runway       = normalizeRunway(landMatch[1])
-    if (runway) return { command: { type: 'land', runway, airport }, confidence: 0.88, raw }
+    const runwayMatch  = text.match(/runway\s+([a-z0-9\s]+(?:left|right|l|r)?)/i)
+    const runway       = runwayMatch ? normalizeRunway(runwayMatch[1]) : '06L'
+    return { command: { type: 'land', runway, airport }, confidence: 0.90, raw }
   }
 
   // Taxi to gate

@@ -133,23 +133,22 @@ html, body, #root {
   cursor: pointer;
 }
 
-.topbar__confirm-btns {
-  display: flex; gap: 6px;
+.topbar__approved {
+  font-family: var(--mono); font-size: 12px; font-weight: 700;
+  color: var(--green); letter-spacing: 0.14em;
+  animation: approved-fade 3s ease forwards;
+}
+@keyframes approved-fade {
+  0%   { opacity: 1; }
+  70%  { opacity: 1; }
+  100% { opacity: 0; }
 }
 
-.confirm-btn {
-  padding: 5px 12px; font-size: 11px; font-family: var(--mono);
-  letter-spacing: 0.06em; cursor: pointer; border: 1px solid;
-  text-transform: uppercase;
+.topbar__awaiting {
+  font-family: var(--mono); font-size: 10px; color: var(--amber);
+  letter-spacing: 0.1em; text-transform: uppercase;
+  animation: ptt-pulse 1.4s ease-in-out infinite;
 }
-.confirm-btn--yes {
-  background: #0a2a12; border-color: #1a4a22; color: var(--green);
-}
-.confirm-btn--yes:hover { background: #122a1a; }
-.confirm-btn--no {
-  background: #2a0a0a; border-color: #4a1a1a; color: var(--red);
-}
-.confirm-btn--no:hover { background: #2a1212; }
 
 /* ── Body ────────────────────────────────────────────────────────────────────── */
 .cockpit__body {
@@ -200,9 +199,6 @@ html, body, #root {
 .ptt-btn__icon { font-size: 16px; }
 .ptt-btn__hint { font-size: 9px; color: var(--text-3); margin-left: 4px; }
 
-.bottombar__confirm-hint {
-  font-size: 11px; color: var(--amber); letter-spacing: 0.04em;
-}
 
 /* ══════════════════════════════════════════════════════════════
    AIRCRAFT PANEL (inline in sidebar)
@@ -296,46 +292,6 @@ html, body, #root {
 .log-entry--pending .log-entry__icon { color: var(--amber); }
 .log-entry__conf { font-family: var(--mono); font-size: 9px; color: var(--text-3); }
 
-/* ══════════════════════════════════════════════════════════════
-   GROUND OPS PANEL
-══════════════════════════════════════════════════════════════ */
-.ground-ops {
-  flex-shrink: 0;
-  border-top: 1px solid var(--border-hi);
-  padding: 10px;
-}
-.ground-ops__header {
-  font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em;
-  color: var(--text-3); margin-bottom: 8px;
-}
-.ground-ops__field {
-  display: flex; flex-direction: column; gap: 3px; margin-bottom: 7px;
-}
-.ground-ops__label {
-  font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em;
-  color: var(--text-3);
-}
-.ground-ops__select {
-  background: var(--surface-2); border: 1px solid var(--border-hi);
-  color: var(--text); font-size: 11px; padding: 4px 6px;
-  font-family: var(--mono); width: 100%;
-}
-.ground-ops__actions {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px;
-}
-.ground-ops__btn {
-  padding: 7px 4px; font-size: 10px; font-family: var(--mono);
-  letter-spacing: 0.04em; cursor: pointer; border: 1px solid;
-  text-transform: uppercase; text-align: center;
-}
-.ground-ops__btn:disabled { opacity: 0.4; cursor: default; }
-.ground-ops__btn--takeoff { background: #0a1a0a; border-color: #1a3a1a; color: var(--green); }
-.ground-ops__btn--takeoff:not(:disabled):hover { background: #112211; }
-.ground-ops__btn--land { background: #1a0a00; border-color: #3a1a00; color: var(--amber); }
-.ground-ops__btn--land:not(:disabled):hover { background: #221500; }
-.ground-ops__note {
-  font-size: 9px; color: var(--text-3); text-align: center; margin-top: 5px;
-}
 
 @keyframes card-in {
   from { opacity: 0; transform: translateY(-6px); }

@@ -65,15 +65,47 @@ export function isConnected() {
   return ws?.readyState === WebSocket.OPEN
 }
 
-// Auto-play TTS audio when server signals it's ready
+// ── TTS audio management ──────────────────────────────────────────────────────
+// Single-flight playback: only the most recent tts_ready ever reaches .play(),
+// and at most one Audio element can exist. A monotonic token invalidates any
+// handler whose async work was superseded by a newer event, so overlapping
+// fetches can never double-play the same clip.
+let currentAudio = null
+let pttActive    = false   // when true, suppress all incoming TTS
+let playToken    = 0       // bumped on every stop/new request
+
+export function setPTTActive(active) {
+  pttActive = active
+  if (active) stopAudio()
+}
+
+export function stopAudio() {
+  playToken++                       // invalidate any in-flight playback
+  if (currentAudio) {
+    currentAudio.onended = null
+    currentAudio.pause()
+    try { currentAudio.currentTime = 0 } catch { /* not seekable yet */ }
+    currentAudio.src = ''
+    currentAudio = null
+  }
+}
+
 on('tts_ready', async () => {
+  if (pttActive) return             // PTT held — don't start new audio
+  stopAudio()                       // kill anything playing; bumps playToken
+  const myToken = playToken         // claim this generation
+
   try {
     const res = await fetch(`http://${window.location.hostname}:3001/api/tts/latest`)
+    if (myToken !== playToken) return            // superseded during fetch
     if (!res.ok || res.status === 204) return
     const blob = await res.blob()
-    const url  = URL.createObjectURL(blob)
+    if (myToken !== playToken) return            // superseded during blob read
+
+    const url   = URL.createObjectURL(blob)
     const audio = new Audio(url)
-    audio.onended = () => URL.revokeObjectURL(url)
+    currentAudio = audio
+    audio.onended = () => { URL.revokeObjectURL(url); if (currentAudio === audio) currentAudio = null }
     await audio.play()
   } catch { /* no audio key or network issue */ }
 })

@@ -98,7 +98,7 @@ export async function scoreRoutes(
       fuelCost:       Math.round(fuelCost       * 100) / 100,
       distancePenalty: Math.round(distancePenalty * 100) / 100,
       waypoints,
-      recommended:    false,
+      recommended:    false as boolean,
       headingOffset:  c.offset,
     } satisfies ScoredRoute
   }))

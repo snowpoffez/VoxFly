@@ -43,7 +43,7 @@ const overlayStyle = (bg, fg) => ({
   pointerEvents: 'none',
 })
 
-export default function Aircraft({ selectedCallsign, dest, throttle, vertMode, livePosRef, onSelectAircraft, onArrival }) {
+export default function Aircraft({ selectedCallsign, landingTarget, runwaysMap, livePosRef, onSelectAircraft, onLandingComplete }) {
   const [aircraft, setAircraft] = useState([])
   const [status, setStatus]     = useState('loading')
   const [errorMsg, setErrorMsg] = useState('')
@@ -117,12 +117,11 @@ export default function Aircraft({ selectedCallsign, dest, throttle, vertMode, l
               squawk:   ac.squawk ?? '—',
             }}
             isSelected={selectedCallsign === callsign}
-            dest={selectedCallsign === callsign ? dest : null}
-            throttle={selectedCallsign === callsign ? throttle : 0}
-            vertMode={selectedCallsign === callsign ? vertMode : 'level'}
+            landingTarget={selectedCallsign === callsign ? landingTarget : null}
+            runwaysMap={selectedCallsign === callsign ? runwaysMap : null}
             livePosRef={selectedCallsign === callsign ? livePosRef : null}
             onSelect={onSelectAircraft}
-            onArrival={selectedCallsign === callsign ? onArrival : null}
+            onLandingComplete={selectedCallsign === callsign ? onLandingComplete : null}
           />
         )
       })}
