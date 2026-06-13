@@ -1,46 +1,28 @@
-// AeroVox Arduino bridge sketch
-// Receives simple serial commands from a desktop bridge.
-
 #include <Arduino.h>
+#include <Servo.h>
 
-const int LED_PIN = LED_BUILTIN;
+Servo myServo;
 
-void handleCommand(const String& command) {
-  if (command == "THROTTLE_UP") {
-    digitalWrite(LED_PIN, HIGH);
-    Serial.println("ACK THROTTLE_UP");
-  } else if (command == "THROTTLE_DOWN") {
-    digitalWrite(LED_PIN, LOW);
-    Serial.println("ACK THROTTLE_DOWN");
-  } else if (command == "TURN_LEFT") {
-    Serial.println("ACK TURN_LEFT");
-  } else if (command == "TURN_RIGHT") {
-    Serial.println("ACK TURN_RIGHT");
-  } else if (command == "YES") {
-    Serial.println("ACK YES");
-  } else if (command == "NO") {
-    Serial.println("ACK NO");
-  } else {
-    Serial.print("UNKNOWN ");
-    Serial.println(command);
-  }
-}
 
 void setup() {
-  pinMode(LED_PIN, OUTPUT);
-  Serial.begin(115200);
-  while (!Serial) {
-    ;
-  }
-  Serial.println("AeroVox Arduino bridge ready");
+  Serial.begin(9600);     // Open serial port at 9600 bps
+  myServo.attach(9);      // Assumes servo signal wire is on Pin 9
+  myServo.write(90);      // Start the plane flat (90 degrees)
 }
+
 
 void loop() {
   if (Serial.available() > 0) {
     String command = Serial.readStringUntil('\n');
     command.trim();
-    if (command.length() > 0) {
-      handleCommand(command);
+
+
+    int angle = command.toInt();
+
+
+    // Move the motor if it's a valid angle between 0 and 180
+    if (angle >= 0 && angle <= 180) {
+      myServo.write(angle);  
     }
   }
 }
