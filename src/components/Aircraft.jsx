@@ -19,7 +19,7 @@ const getBoundingBox = (centerLat, centerLon, radiusKm) => {
   }
 }
 
-const BBOX = getBoundingBox(YYZ_COORDS.lat, YYZ_COORDS.lon, 1000)
+const BBOX = getBoundingBox(YYZ_COORDS.lat, YYZ_COORDS.lon, 500)
 
 const buildUrl = () => {
   const { minLat, maxLat, minLon, maxLon } = BBOX
@@ -78,9 +78,9 @@ const planeIcon = (heading, isSelected) => {
     ? 'drop-shadow(0 0 4px #ff7a18)'
     : 'drop-shadow(0 0 2px rgba(0,180,255,0.6))'
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" 
     style="transform:rotate(${deg}deg);filter:${shadow};">
-    <path fill="${color}" d="M12 2 L9 10 L2 11 L4 13 L9 12 L8 20 L10 21 L12 16 L14 21 L16 20 L15 12 L20 13 L22 11 L15 10 Z"/>
+    <path fill="${color}" d="M12,2A1.5,1.5,0,0,0,10.5,3.5V8.5L2,14v2l8.5-2.5V19L8,21v1l4-1,4,1V21l-2.5-2V13.5L22,16V14L13.5,8.5V3.5A1.5,1.5,0,0,0,12,2Z"/>
   </svg>`
 
   return L.divIcon({
