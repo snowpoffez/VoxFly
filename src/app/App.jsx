@@ -50,8 +50,8 @@ function parseLandTarget(text) {
 }
 
 const LANGUAGES = [
-  { code: 'fr', label: 'Français'  },
   { code: 'en', label: 'English'   },
+  { code: 'fr', label: 'Français'  },
   { code: 'es', label: 'Español'   },
   { code: 'pt', label: 'Português' },
   { code: 'zh', label: '中文'      },
@@ -68,7 +68,7 @@ export default function App() {
 
   const [wsConnected, setWsConnected] = useState(false)
   const [appState,    setAppState]    = useState('IDLE')
-  const [lang,        setLang]        = useState('fr')
+  const [lang,        setLang]        = useState('')
   const [transcript,  setTranscript]  = useState('')
   const [readback,    setReadback]    = useState(null)
   const [routes,      setRoutes]      = useState([])
