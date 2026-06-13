@@ -7,15 +7,160 @@
 html, body, #root {
   width: 100%;
   height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: Inter, 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+body {
+  background:
+    radial-gradient(circle at top left, rgba(255, 122, 24, 0.14), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(0, 204, 255, 0.12), transparent 30%),
+    #0d1117;
+  color: #e8edf2;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: minmax(320px, 380px) 1fr;
+  width: 100vw;
+  height: 100vh;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem;
+  background: rgba(8, 12, 18, 0.92);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.sidebar__header h1 {
+  margin: 0.2rem 0 0.35rem;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.sidebar__eyebrow,
+.sidebar__label {
+  color: #7ea2c8;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+}
+
+.sidebar__description {
+  color: #a9b4c0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.sidebar__summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.sidebar__summary > div,
+.sidebar__active-card,
+.sidebar__search input,
+.airport-list__item {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 16px;
+}
+
+.sidebar__summary > div,
+.sidebar__active-card {
+  padding: 0.9rem;
+}
+
+.sidebar__summary strong,
+.sidebar__active-card h2 {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 1.2rem;
+}
+
+.sidebar__search {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.sidebar__search span {
+  color: #b3bec9;
+  font-size: 0.85rem;
+}
+
+.sidebar__search input {
+  width: 100%;
+  padding: 0.85rem 0.95rem;
+  color: #f4f7fa;
+  outline: none;
+}
+
+.sidebar__search input::placeholder {
+  color: #7a8695;
+}
+
+.airport-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.airport-list__item {
+  display: grid;
+  gap: 0.15rem;
+  text-align: left;
+  padding: 0.85rem 0.9rem;
+  color: #edf2f7;
+  cursor: pointer;
+  transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.airport-list__item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 122, 24, 0.55);
+  background: rgba(255, 122, 24, 0.08);
+}
+
+.airport-list__item--selected {
+  border-color: rgba(255, 122, 24, 0.8);
+  background: rgba(255, 122, 24, 0.14);
+}
+
+.airport-list__item span,
+.airport-list__item small {
+  color: #adbac7;
+}
+
+.map-panel {
+  position: relative;
+  min-width: 0;
+}
+
+.loading-pill {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  z-index: 1000;
+  padding: 0.75rem 1rem;
+  background: rgba(8, 12, 18, 0.88);
+  color: #edf2f7;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+}
+
 .leaflet-container {
   background-color: #1a1a1a;
+  width: 100%;
+  height: 100%;
 }
 
 .leaflet-popup-content {
@@ -32,4 +177,16 @@ html, body, #root {
 
 .leaflet-popup-tip {
   background-color: #2a2a2a;
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(280px, 42vh) 1fr;
+  }
+
+  .sidebar {
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
 }
