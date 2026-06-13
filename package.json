@@ -5,17 +5,20 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:server": "cd server && npx tsx src/index.ts",
+    "dev:all": "concurrently -n SERVER,VITE -c cyan,green \"npm run dev:server\" \"npm run dev\"",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "leaflet": "^1.9.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "leaflet": "^1.9.4",
     "react-leaflet": "^4.2.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^8.2.2",
     "typescript": "^5.3.3",
     "vite": "^5.0.8"
   },

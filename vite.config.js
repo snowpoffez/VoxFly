@@ -7,6 +7,7 @@ export default defineConfig({
     port: 3000,
     open: true,
     proxy: {
+      // ADS-B live traffic — must come first (more specific path)
       '/api/adsb': {
         target: 'https://api.adsb.lol',
         changeOrigin: true,

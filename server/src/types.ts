@@ -77,7 +77,6 @@ export type S2C =
   | { type: 'readback';       english: string; translated: string; lang: string }
   | { type: 'routes';         routes: ScoredRoute[]; pendingCommand: Command }
   | { type: 'log';            entry: LogEntry }
-  | { type: 'fatigue';        level: 'warning' | 'escalate'; translated: string }
   | { type: 'tts_ready' }
   | { type: 'ground_phase';   phase: AppState; airport: string; runway?: string; gate?: string }
   | { type: 'no_fly_alert';   zoneName: string; alternateRoute: ScoredRoute }
