@@ -23,7 +23,7 @@ app.use(express.json())
 // ── Shared state ──────────────────────────────────────────────────────────────
 const sm = new StateMachine()
 
-let currentLang      = process.env.DEFAULT_LANG ?? 'fr'
+let currentLang      = process.env.DEFAULT_LANG ?? 'en'
 let pendingCommand:   Command | null      = null
 let pendingRoutes:    ScoredRoute[] | null = null
 let pendingLogId:     string | null = null
@@ -249,8 +249,6 @@ async function handleConfirm() {
   }
 
   if (cmd.type === 'heading') {
-    // FIXED: Pitch argument removed
-    sendBearing(cmd.value)
     await delay(2000)
     sm.transition('STABILIZED')
     await delay(1000)

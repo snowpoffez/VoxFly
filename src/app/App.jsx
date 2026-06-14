@@ -7,6 +7,7 @@ import AirportInfoCard from '../components/AirportInfoCard.jsx'
 import WindLayer, { WIND_LEVELS } from '../components/WindLayer.jsx'
 import CommandLog      from '../components/CommandLog.jsx'
 import RoutePreview    from '../components/RoutePreview.jsx'
+import RouteMarkers    from '../components/RouteMarkers.jsx'
 import { on, send, setPTTActive } from '../services/wsClient.js'
 import { startListening, stopListening, isSupported } from '../services/voiceInput.js'
 
@@ -41,10 +42,24 @@ const AIRPORT_ALIASES = {
   calgary: 'CYYC', yyc: 'CYYC',
   edmonton: 'CYEG', yeg: 'CYEG',
 }
+function normRwy(raw) {
+  const dir = /left|l\b/i.test(raw) ? 'L' : /right|r\b/i.test(raw) ? 'R' : ''
+  const cl = raw.replace(/left|right|l\b|r\b/ig, '').trim()
+  const dm = cl.match(/\d+/)
+  if (dm) return String(parseInt(dm[0], 10)).padStart(2, '0') + dir
+  const ws = ['zero','one','two','three','four','five','six','seven','eight','nine']
+  const pts = cl.toLowerCase().split(/\s+/).filter(Boolean)
+  let n = 0
+  for (const p of pts) { const i = ws.indexOf(p); if (i >= 0) n = n * 10 + i }
+  return n > 0 ? String(n).padStart(2, '0') + dir : raw.toUpperCase()
+}
+
 function parseLandTarget(text) {
   const t = text.toLowerCase()
+  const rwy = (t.match(/runway\s+([a-z0-9\s]+(?:left|right|l|r)?)/i) ?? [])[1]
+  const rwyId = rwy ? normRwy(rwy) : undefined
   for (const [alias, icao] of Object.entries(AIRPORT_ALIASES)) {
-    if (t.includes(alias)) return { airport: icao, runway: '06L', ...AIRPORT_COORDS[icao] }
+    if (t.includes(alias)) return { airport: icao, runway: rwyId, ...AIRPORT_COORDS[icao] }
   }
   return null
 }
@@ -77,7 +92,22 @@ export default function App() {
   const [pttHeld,        setPttHeld]        = useState(false)
   const [landingTarget,  setLandingTarget]  = useState(null)
   const [approved,       setApproved]       = useState(false)
-  const pendingLandMeta = useRef(null)
+  const pendingLandMeta  = useRef(null)
+  const pendingHeadingRef = useRef(null)
+
+  // Client-side targeted simulator values
+  const [targetAltitude, setTargetAltitude] = useState(null) 
+  const [targetSpeed,    setTargetSpeed]    = useState(null) 
+  const [targetHeading,  setTargetHeading]  = useState(null) 
+
+  // Reset targets if the user manually changes or deselects an aircraft
+  const handleSelectAircraft = (aircraft) => {
+    setSelectedAircraft(aircraft)
+    setTargetAltitude(null)
+    setTargetSpeed(null)
+    setTargetHeading(null)
+    pendingHeadingRef.current = null
+  }
 
   // ── WebSocket events ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -86,16 +116,58 @@ export default function App() {
       on('_disconnected', () => setWsConnected(false)),
       on('state', (msg) => {
         setAppState(msg.state)
-        // Voice "confirm" path: server transitions to EXECUTING — apply pending land target
-        if (msg.state === 'EXECUTING' && pendingLandMeta.current) {
-          setLandingTarget(pendingLandMeta.current)
-          pendingLandMeta.current = null
-          setApproved(true)
-          setTimeout(() => setApproved(false), 3000)
+        if (msg.state === 'EXECUTING') {
+          if (pendingHeadingRef.current != null) {
+            setTargetHeading(pendingHeadingRef.current)
+            pendingHeadingRef.current = null
+          }
+          if (pendingLandMeta.current) {
+            setLandingTarget(pendingLandMeta.current)
+            pendingLandMeta.current = null
+            setApproved(true)
+            setTimeout(() => setApproved(false), 3000)
+          }
+        } else if (msg.state === 'IDLE') {
+          pendingHeadingRef.current = null
         }
       }),
       on('readback', (msg) => {
         setReadback({ english: msg.english, translated: msg.translated })
+        
+        const text = (msg.english || '').toLowerCase()
+
+        // 1. Intercept Heading Changes (store pending, apply on EXECUTING)
+        if (text.includes('heading') || text.includes('fly') || text.includes('turn')) {
+          const digits = text.match(/\d+/)
+          if (digits) {
+            const parsedHdg = parseInt(digits[0], 10)
+            if (parsedHdg >= 0 && parsedHdg <= 360) {
+              pendingHeadingRef.current = parsedHdg
+            }
+          }
+        }
+
+        // 2. Intercept Altitude Changes
+        if (text.includes('climb') || text.includes('descend') || text.includes('altitude') || text.includes('flight level')) {
+          const digits = text.match(/\d[\d,.]*/g)
+          if (digits) {
+            let parsedAlt = parseInt(digits[0].replace(/,/g, ''), 10)
+            if (text.includes('flight level') && parsedAlt < 1000) {
+              parsedAlt = parsedAlt * 100
+            }
+            setTargetAltitude(parsedAlt)
+          }
+        }
+
+        // 3. Intercept Speed Changes
+        if (text.includes('speed') || text.includes('knots') || text.includes('reduce') || text.includes('increase')) {
+          const digits = text.match(/\d+/)
+          if (digits) {
+            const parsedSpeed = parseInt(digits[0], 10)
+            setTargetSpeed(parsedSpeed)
+          }
+        }
+
         if (msg.meta?.command === 'land') {
           pendingLandMeta.current = { lat: msg.meta.lat, lon: msg.meta.lon, airport: msg.meta.airport, runway: msg.meta.runway }
         } else {
@@ -144,18 +216,20 @@ export default function App() {
         setPTTActive(false)
 
         if (LAND_RE.test(text)) {
-          // Store land target client-side immediately so confirm doesn't need server
           const target = parseLandTarget(text)
           if (target) pendingLandMeta.current = target
         } else if (CONFIRM_RE.test(text) && pendingLandMeta.current) {
-          // Confirm locally — don't wait for server round-trip
           setLandingTarget(pendingLandMeta.current)
           pendingLandMeta.current = null
           setApproved(true)
           setTimeout(() => setApproved(false), 3000)
         } else if (CANCEL_RE.test(text)) {
           pendingLandMeta.current = null
+          pendingHeadingRef.current = null
           setLandingTarget(null)
+          setTargetAltitude(null)
+          setTargetSpeed(null)
+          setTargetHeading(null)
         }
 
         send({ type: 'transcript', text })
@@ -173,30 +247,13 @@ export default function App() {
 
   const handleLangChange = (newLang) => { setLang(newLang); send({ type: 'language', lang: newLang }) }
 
-  const handleConfirm = () => {
-    send({ type: 'confirm' })
-    if (pendingLandMeta.current) {
-      setLandingTarget(pendingLandMeta.current)
-      pendingLandMeta.current = null
-      setApproved(true)
-      setTimeout(() => setApproved(false), 3000)
-    }
-  }
-
-  const handleCancel = () => {
-    send({ type: 'cancel' })
-    pendingLandMeta.current = null
-    setLandingTarget(null)
-  }
-
   return (
     <div className="cockpit">
-
       {/* ── Top bar ─────────────────────────────────────────────────────────── */}
       <div className="topbar">
         <div className="topbar__left">
           <span className="topbar__logo">AeroVox</span>
-{!wsConnected && <span className="topbar__offline">⚡ offline</span>}
+          {!wsConnected && <span className="topbar__offline">⚡ offline</span>}
         </div>
 
         <div className="topbar__center">
@@ -220,7 +277,6 @@ export default function App() {
           <select className="topbar__lang" value={lang} onChange={e => handleLangChange(e.target.value)}>
             {LANGUAGES.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
           </select>
-
           {appState === 'AWAITING_CONFIRMATION' && !approved && (
             <div className="topbar__awaiting">Say "confirm" or "cancel"</div>
           )}
@@ -250,13 +306,25 @@ export default function App() {
                 setSelectedAirport(prev => prev?.ident === airport.ident ? null : airport)
               }
             />
+
+            {/* 🔴 RED MARKERS ADDED HERE */}
+            <RouteMarkers routes={routes} targetHeading={targetHeading} />
+
             <Aircraft
               selectedCallsign={selectedAircraft?.callsign}
               landingTarget={landingTarget}
+              targetAltitude={targetAltitude}
+              targetSpeed={targetSpeed}
+              targetHeading={targetHeading} 
               runwaysMap={runwaysMap}
               livePosRef={livePosRef}
-              onSelectAircraft={setSelectedAircraft}
-              onLandingComplete={() => setLandingTarget(null)}
+              onSelectAircraft={handleSelectAircraft}
+              onLandingComplete={() => {
+                setLandingTarget(null)
+                setTargetAltitude(null)
+                setTargetSpeed(null)
+                setTargetHeading(null)
+              }}
             />
             <WindLayer visible={windVisible} />
             <RoutePreview routes={routes} appState={appState} />
@@ -267,44 +335,18 @@ export default function App() {
             runwaysMap={runwaysMap}
             onClose={() => setSelectedAirport(null)}
           />
-
-          <div className="wind-controls">
-            <button
-              className={`wind-toggle${windVisible ? ' wind-toggle--active' : ''}`}
-              onClick={() => setWindVisible(v => !v)}
-            >
-              <span className="wind-toggle__icon">〜</span>
-              Wind {windVisible ? 'On' : 'Off'}
-            </button>
-            {windVisible && (
-              <div className="wind-legend">
-                <div className="wind-legend__title">Wind Speed</div>
-                {WIND_LEVELS.map(({ label, max, rgb }) => (
-                  <div key={label} className="wind-legend__row">
-                    <span className="wind-legend__swatch" style={{ background: `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` }} />
-                    <span className="wind-legend__label">{label}</span>
-                    <span className="wind-legend__range">
-                      {max === Infinity ? '> 79 km/h' : `< ${Math.round(max * 3.6)} km/h`}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
 
-        {/* ── Right sidebar ─────────────────────────────────────────────────── */}
         <div className="cockpit__sidebar">
           <CommandLog
             entries={commandLog}
             craft={selectedAircraft}
             livePosRef={livePosRef}
-            onCloseAircraft={() => setSelectedAircraft(null)}
+            onCloseAircraft={() => handleSelectAircraft(null)}
           />
         </div>
       </div>
 
-      {/* ── Bottom bar ──────────────────────────────────────────────────────── */}
       <div className="bottombar">
         <button
           className={`ptt-btn${isListening ? ' ptt-btn--active' : ''}`}

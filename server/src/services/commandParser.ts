@@ -55,7 +55,7 @@ const AIRPORT_ALIASES: Record<string, string> = {
   vancouver: 'CYVR', yvr: 'CYVR', cyvr: 'CYVR',
   calgary: 'CYYC', yyc: 'CYYC', cyyc: 'CYYC',
   edmonton: 'CYEG', yeg: 'CYEG', cyeg: 'CYEG',
-  jfk: 'KJFK', 'new york': 'KJFK', kennedy: 'KJFK',
+  jfk: 'KJFK', kjfk: 'KJFK', 'new york': 'KJFK', kennedy: 'KJFK',
   chicago: 'KORD', ohare: 'KORD', ord: 'KORD',
 }
 
@@ -83,11 +83,11 @@ export function parseCommand(raw: string): ParsedCommand {
 
   // Landing
   if (/\b(?:land|approach|cleared to land|cleared for approach)\b/i.test(text)) {
-    const airportMatch = text.match(/\b(cyyz|cyul|cyvr|cyyc|cyeg|kjfk|kord|yyz|yul|yvr|yyc|yeg|toronto|vancouver|montreal|calgary|edmonton|chicago|new york)\b/i)
+    const airportMatch = text.match(/\b(cyyz|cyul|cyvr|cyyc|cyeg|kjfk|kord|jfk|ord|yyz|yul|yvr|yyc|yeg|toronto|vancouver|montreal|calgary|edmonton|chicago|new york)\b/i)
     const airportRaw   = airportMatch ? airportMatch[1] : 'CYYZ'
     const airport      = AIRPORT_ALIASES[airportRaw.toLowerCase()] ?? airportRaw.toUpperCase()
     const runwayMatch  = text.match(/runway\s+([a-z0-9\s]+(?:left|right|l|r)?)/i)
-    const runway       = runwayMatch ? normalizeRunway(runwayMatch[1]) : '06L'
+    const runway       = runwayMatch ? normalizeRunway(runwayMatch[1]) : ''
     return { command: { type: 'land', runway, airport }, confidence: 0.90, raw }
   }
 

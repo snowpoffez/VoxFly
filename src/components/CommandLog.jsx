@@ -12,11 +12,11 @@ const fmtCoord = (v, pos, neg) => v == null ? '—' : `${Math.abs(v).toFixed(4)}
 
 function AircraftPanel({ craft, livePosRef, onClose }) {
   const [liveState, setLiveState] = useState({
-    lat: craft.lat, lon: craft.lon, velocity: null, alt: null, phase: null,
+    lat: craft.lat, lon: craft.lon, velocity: null, alt: null, phase: null, runway: null,
   })
 
   useEffect(() => {
-    setLiveState({ lat: craft.lat, lon: craft.lon, velocity: null, alt: null, phase: null })
+    setLiveState({ lat: craft.lat, lon: craft.lon, velocity: null, alt: null, phase: null, runway: null })
     let frameId
     const tick = () => {
       if (livePosRef?.current) {
@@ -24,8 +24,8 @@ function AircraftPanel({ craft, livePosRef, onClose }) {
         setLiveState(prev => {
           if (prev.lat === p.lat && prev.lon === p.lon &&
               prev.velocity === p.velocity && prev.alt === p.alt &&
-              prev.phase === p.phase) return prev
-          return { lat: p.lat, lon: p.lon, velocity: p.velocity ?? null, alt: p.alt ?? null, phase: p.phase ?? null }
+              prev.phase === p.phase && prev.runway === p.runway) return prev
+          return { lat: p.lat, lon: p.lon, velocity: p.velocity ?? null, alt: p.alt ?? null, phase: p.phase ?? null, runway: p.runway ?? null }
         })
       }
       frameId = requestAnimationFrame(tick)
@@ -74,6 +74,14 @@ function AircraftPanel({ craft, livePosRef, onClose }) {
             <span className="ac-panel__telem-label">PHASE</span>
             <span className="ac-panel__telem-value" style={{ gridColumn: 'span 3', color: '#22c55e' }}>
               {liveState.phase.toUpperCase()}
+            </span>
+          </div>
+        )}
+        {liveState.runway && (
+          <div className="ac-panel__telem-row">
+            <span className="ac-panel__telem-label">RWY</span>
+            <span className="ac-panel__telem-value" style={{ gridColumn: 'span 3', color: '#22c55e' }}>
+              {liveState.runway}
             </span>
           </div>
         )}
